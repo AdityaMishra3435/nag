@@ -53,3 +53,22 @@ class Block(Stmt):
 
     def accept(self, visitor: StmtVisitor):
         return visitor.visit_block_stmt(self)
+
+
+@dataclass
+class If(Stmt):
+    condition: Expr
+    then_branch: Stmt
+    else_branch: Stmt
+
+    def accept(self, visitor: StmtVisitor):
+        return visitor.visit_if_stmt(self)
+
+
+@dataclass
+class While(Stmt):
+    condition: Expr
+    body: Stmt
+
+    def accept(self, visitor: StmtVisitor):
+        return visitor.visit_while_stmt(self)

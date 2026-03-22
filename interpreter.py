@@ -1,5 +1,15 @@
-from expr import Expr, ExprVisitor, Binary, Grouping, Literal, Unary, Variable, Assign
-from stmt import Stmt, StmtVisitor, Print, ExprStmt, Var, Block
+from expr import (
+    Expr,
+    ExprVisitor,
+    Binary,
+    Grouping,
+    Literal,
+    Unary,
+    Variable,
+    Assign,
+    Logical,
+)
+from stmt import Stmt, StmtVisitor, Print, ExprStmt, Var, Block, If, While
 from reporter import Reporter
 from typing import Any, List
 from tokentype import TokenType
@@ -52,6 +62,16 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 self.execute(statement)
         finally:
             self.env = previous_env
+
+    def visit_if_stmt(self, stmt: If) -> None:
+        if self.is_truthy(self.evaluate(stmt.condition)):
+            self.execute(stmt.then_branch)
+        elif stmt.else_branch is not None:
+            self.execute(stmt.else_branch)
+
+    def visit_while_stmt(self, stmt: While) -> None:
+        while self.is_truthy(self.evaluate(stmt.condition)):
+            self.execute(stmt.body)
 
     # expression methods
     def visit_binary_expr(self, expr: Binary) -> Any:
@@ -124,6 +144,15 @@ class Interpreter(ExprVisitor, StmtVisitor):
         value = self.evaluate(expr.value)
         self.env.assign(expr.name, value)
         return value
+
+    def visit_logical_expr(self, expr: Logical) -> Any:
+        left = self.evaluate(expr.left)
+        # early termination cases
+        if expr.operator.type == TokenType.OR and self.is_truthy(left):
+            return left
+        elif expr.operator.type == TokenType.AND and not self.is_truthy(left):
+            return left
+        return self.evaluate(expr.right)
 
     # helper methods
     def check_number_operand(self, operator: Token, operand: Any) -> None:

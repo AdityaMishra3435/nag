@@ -81,3 +81,13 @@ class Assign(Expr):
 
     def accept(self, visitor: ExprVisitor) -> Any:
         return visitor.visit_assign_expr(self)
+
+
+@dataclass
+class Logical(Expr):
+    left: Expr
+    operator: Token
+    right: Expr
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_logical_expr(self)

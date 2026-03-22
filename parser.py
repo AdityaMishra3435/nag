@@ -1,6 +1,16 @@
 from typing import Any, List
-from expr import Expr, ExprVisitor, Binary, Grouping, Literal, Unary, Variable, Assign
-from stmt import Stmt, Print, ExprStmt, Var, Block
+from expr import (
+    Expr,
+    ExprVisitor,
+    Binary,
+    Grouping,
+    Literal,
+    Unary,
+    Variable,
+    Assign,
+    Logical,
+)
+from stmt import Stmt, Print, ExprStmt, Var, Block, If, While
 from tokenclass import Token
 from tokentype import TokenType
 from reporter import Reporter
@@ -42,7 +52,69 @@ class Parser:
             return self.print_statement()
         if self.match(TokenType.LEFT_BRACE):
             return Block(self.block_statement())
+        if self.match(TokenType.IF):
+            return self.if_statement()
+        if self.match(TokenType.WHILE):
+            return self.while_statement()
+        if self.match(TokenType.FOR):
+            return self.for_statement()
         return self.expression_statement()
+
+    def if_statement(self) -> Stmt:
+        self.consume(TokenType.LEFT_PAREN, "Expected '(' after if.")
+        condition = self.expression()
+        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after if condition.")
+
+        then_branch = self.statement()
+        else_branch = None
+        if self.match(TokenType.ELSE):
+            else_branch = self.statement()
+        return If(condition, then_branch, else_branch)
+
+    def while_statement(self) -> Stmt:
+        self.consume(TokenType.LEFT_PAREN, "Expected '(' after loop.")
+        condition = self.expression()
+        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after loop condition.")
+
+        body = self.statement()
+        return While(condition, body)
+
+    def for_statement(self) -> Stmt:
+        self.consume(TokenType.LEFT_PAREN, "Expected '(' after for.")
+
+        # initializer can be blank, var x=0, or x=0 (where var x is predefined)
+        initializer = None
+        if self.match(TokenType.SEMICOLON):
+            initializer = None
+        elif self.match(TokenType.VAR):
+            initializer = self.var_declaration()
+        else:
+            initializer = self.expression_statement()
+
+        # condition
+        condition = None
+        if not self.check(TokenType.SEMICOLON):
+            condition = self.expression()
+        self.consume(TokenType.SEMICOLON, "Expected ';' after loop condition.")
+
+        # increment
+        increment = None
+        if not self.check(TokenType.RIGHT_PAREN):
+            increment = self.expression()
+        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after loop increment.")
+
+        # body
+        body = self.statement()
+
+        # convert to while
+        if increment is not None:
+            body = Block([body, ExprStmt(increment)])
+        if condition is None:
+            condition = Literal(True)
+        body = While(condition, body)
+        if initializer is not None:
+            body = Block([initializer, body])
+        return body
 
     def block_statement(self) -> List[Stmt]:
         statements = []
@@ -66,7 +138,7 @@ class Parser:
         return self.assignment()
 
     def assignment(self) -> Expr:
-        expr = self.equality()
+        expr = self.logic_or()
 
         # if no assignment occurs, then return expression directly
         if self.match(TokenType.EQUAL):
@@ -78,6 +150,22 @@ class Parser:
                 return Assign(expr.name, value)
             self.error(equals, "Invalid assignment target.")
 
+        return expr
+
+    def logic_or(self) -> Expr:
+        expr = self.logic_and()
+        while self.match(TokenType.OR):
+            operator = self.previous()
+            right = self.logic_and()
+            expr = Logical(expr, operator, right)
+        return expr
+
+    def logic_and(self) -> Expr:
+        expr = self.equality()
+        while self.match(TokenType.AND):
+            operator = self.previous
+            right = self.equality()
+            expr = Logical(expr, operator, right)
         return expr
 
     def equality(self) -> Expr:
