@@ -8,21 +8,28 @@ from expr import (
     Variable,
     Assign,
     Logical,
+    Call
 )
-from stmt import Stmt, StmtVisitor, Print, ExprStmt, Var, Block, If, While
+from stmt import Stmt, StmtVisitor, Print, ExprStmt, Var, Block, If, While, Return
 from reporter import Reporter
 from typing import Any, List
 from tokentype import TokenType
 from tokenclass import Token
 from error import InterpreterError
 from environment import Env
+from nag_callable import NagCallable, Clock
+from nag_function import NagFunction
 
 
 class Interpreter(ExprVisitor, StmtVisitor):
     def __init__(self, reporter: Reporter) -> None:
         self.reporter = reporter
-        self.env = Env()
+        self.global_env = Env()
+        self.env = self.global_env
 
+        clock_fn = NagCallable
+        self.global_env.define("clock", Clock)
+        
     def interpret(self, statements: List[Stmt]) -> Any:
         try:
             for statement in statements:
@@ -62,7 +69,7 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 self.execute(statement)
         finally:
             self.env = previous_env
-
+    
     def visit_if_stmt(self, stmt: If) -> None:
         if self.is_truthy(self.evaluate(stmt.condition)):
             self.execute(stmt.then_branch)
@@ -73,6 +80,15 @@ class Interpreter(ExprVisitor, StmtVisitor):
         while self.is_truthy(self.evaluate(stmt.condition)):
             self.execute(stmt.body)
 
+    def visit_function_stmt(self, stmt: Function) -> None:
+        function = NagFunction(stmt, self.env)
+        self.env.define(stmt.name.lexeme, function)
+
+    def visit_return_stmt(self, stmt: Return) -> None:
+        value = None
+        if stmt.value is not None:
+            value = self.evaluate(stmt.value)
+        raise Return(value)
     # expression methods
     def visit_binary_expr(self, expr: Binary) -> Any:
         left = self.evaluate(expr.left)
@@ -153,6 +169,18 @@ class Interpreter(ExprVisitor, StmtVisitor):
         elif expr.operator.type == TokenType.AND and not self.is_truthy(left):
             return left
         return self.evaluate(expr.right)
+
+    def visit_call_expr(self, expr: Call) -> Any:
+        callee = self.evaluate(expr.callee)
+        arguments = []
+        for argument in expr.arguments:
+            arguments.append(self.evaluate(argument))
+        
+        if not isinstance(callee, NagCallable):
+            raise InterpreterError(expr.paren, "Can only call functions and classes.")
+        if len(arguments) != callee.arity():
+            raise InterpreterError(expr.paren, f"Expected {callee.arity()} arguments but got {len(arguments)}.")
+        return callee.call(self, arguments)
 
     # helper methods
     def check_number_operand(self, operator: Token, operand: Any) -> None:

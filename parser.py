@@ -9,8 +9,9 @@ from expr import (
     Variable,
     Assign,
     Logical,
+    Call
 )
-from stmt import Stmt, Print, ExprStmt, Var, Block, If, While
+from stmt import Stmt, Print, ExprStmt, Var, Block, If, While, Function, Return
 from tokenclass import Token
 from tokentype import TokenType
 from reporter import Reporter
@@ -32,12 +33,32 @@ class Parser:
     # statement stuff
     def declaration(self) -> Stmt:
         try:
+            if self.match(TokenType.FUN):
+                return self.function_declaration("function")
             if self.match(TokenType.VAR):
                 return self.var_declaration()
             return self.statement()
         except ParseError as error:
             self.synchronize()
             return None
+
+    def function_declaration(self, kind: str) -> Stmt:
+        print("l46 function_declaration begin")
+        name = self.consume(TokenType.IDENTIFIER, f"Expect {kind} name.")
+        self.consume(TokenType.LEFT_PAREN, f"Expect '(' after {kind} name.")
+        parameters: List[Token] = []
+        if not self.check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(parameters) >= 255:
+                    self.reporter.error(self.peek(), "Can't have more than 255 parameters.")
+                parameters.append(self.consume(TokenType.IDENTIFIER, "Expect parameter name."))
+                if not self.match(TokenType.COMMA):
+                    break
+        self.consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters")
+        self.consume(TokenType.LEFT_BRACE, f"Expect '{{' before {kind} body.")
+        print("l58 starting block_statement()")
+        body = self.block_statement()
+        return Function(name, parameters, body) 
 
     def var_declaration(self) -> Stmt:
         name: Token = self.consume(TokenType.IDENTIFIER, "Missing variable name.")
@@ -50,6 +71,8 @@ class Parser:
     def statement(self) -> Stmt:
         if self.match(TokenType.PRINT):
             return self.print_statement()
+        if self.match(TokenType.RETURN):
+            return self.return_statement()
         if self.match(TokenType.LEFT_BRACE):
             return Block(self.block_statement())
         if self.match(TokenType.IF):
@@ -59,6 +82,14 @@ class Parser:
         if self.match(TokenType.FOR):
             return self.for_statement()
         return self.expression_statement()
+
+    def return_statement(self) -> Self:
+        keyword = self.previous()
+        value = None
+        if not self.check(TokenType.SEMICOLON):
+            value = self.expression()
+        self.consume(TokenType.SEMICOLON, "Expect ';' after return value.")
+        return Return(value)
 
     def if_statement(self) -> Stmt:
         self.consume(TokenType.LEFT_PAREN, "Expected '(' after if.")
@@ -117,9 +148,11 @@ class Parser:
         return body
 
     def block_statement(self) -> List[Stmt]:
+        print("l151 block begin")
         statements = []
         while not self.check(TokenType.RIGHT_BRACE) and not self.is_at_end():
             statements.append(self.declaration())
+        print(f"l151 - at {self.peek().lexeme}")
         self.consume(TokenType.RIGHT_BRACE, "Expect '}' after block.")
         return statements
 
@@ -210,7 +243,28 @@ class Parser:
             operator = self.previous()
             expr = self.unary()
             return Unary(operator, expr)
-        return self.primary()
+        return self.call()
+
+    def call(self) -> Expr:
+        expr = self.primary()
+        while True:
+            if self.match(TokenType.LEFT_PAREN):
+                expr = self.finish_call(expr)
+            else:
+                break
+        return expr
+
+    def finish_call(self, callee: Expr) -> Expr:
+        arguments: List[Expr] = []
+        if not self.check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(arguments) >= 255:
+                    self.error(self.peek(), "Can't have more than 255 arguments.")
+                arguments.append(self.expression())
+                if not self.match(TokenType.COMMA):
+                    break
+        paren: Token = self.consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.")
+        return Call(callee, paren, arguments)
 
     def primary(self) -> Expr:
         if self.match(TokenType.FALSE):

@@ -72,3 +72,22 @@ class While(Stmt):
 
     def accept(self, visitor: StmtVisitor):
         return visitor.visit_while_stmt(self)
+
+@dataclass
+class Function(Stmt):
+    name: Token
+    params: List[Token]
+    body: List[Stmt]
+
+    def accept(self, visitor: StmtVisitor):
+        return visitor.visit_function_stmt(self)
+
+class Return(RuntimeError):
+    def __init__(self, value) -> None:
+        super().__init__()
+        self.value = value
+
+    def accept(self, visitor: StmtVisitor):
+        return visitor.visit_return_stmt(self)
+
+    

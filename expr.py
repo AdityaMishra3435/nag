@@ -91,3 +91,14 @@ class Logical(Expr):
 
     def accept(self, visitor: ExprVisitor) -> Any:
         return visitor.visit_logical_expr(self)
+
+@dataclass
+class Call(Expr):
+    callee: Expr
+    paren: Token
+    arguments: List[Expr]
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_call_expr(self)
+
+
